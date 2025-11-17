@@ -118,6 +118,8 @@ def training_loop(
     allow_tf32              = False,    # Enable torch.backends.cuda.matmul.allow_tf32 and torch.backends.cudnn.allow_tf32?
     abort_fn                = None,     # Callback function for determining whether to abort training. Must return consistent results across ranks.
     progress_fn             = None,     # Callback function for updating training progress. Called for all ranks.
+    af_pen                  = 0,        # Penality factor for area-fraction loss constraint (Aditya Gollapalli's code)
+    af_start                = 1000,     # Starting kimg after which area-fraction loss will be calculated. (Aditya Gollapalli's code)
 ):
     # Initialize.
     start_time = time.time()
@@ -281,7 +283,9 @@ def training_loop(
             for round_idx, (real_img, real_c, gen_z, gen_c) in enumerate(zip(phase_real_img, phase_real_c, phase_gen_z, phase_gen_c)):
                 sync = (round_idx == batch_size // (batch_gpu * num_gpus) - 1)
                 gain = phase.interval
-                loss.accumulate_gradients(phase=phase.name, real_img=real_img, real_c=real_c, gen_z=gen_z, gen_c=gen_c, sync=sync, gain=gain)
+
+                #Aditya Gollapalli's code
+                loss.accumulate_gradients(phase=phase.name, real_img=real_img, real_c=real_c, gen_z=gen_z, gen_c=gen_c, sync=sync, gain=gain, cur_nimg=cur_nimg, af_pen=af_pen, af_start=af_start)
 
             # Update weights.
             phase.module.requires_grad_(False)

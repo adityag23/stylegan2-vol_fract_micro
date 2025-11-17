@@ -6,6 +6,11 @@
 # distribution of this software and related documentation without an express
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 
+#My edit
+from PIL import Image
+import torchvision.transforms as T 
+import cv2
+
 import numpy as np
 import torch
 from torch_utils import training_stats
@@ -54,7 +59,7 @@ class StyleGAN2Loss(Loss):
             logits = self.D(img, c)
         return logits
 
-    def accumulate_gradients(self, phase, real_img, real_c, gen_z, gen_c, sync, gain):
+    def accumulate_gradients(self, phase, real_img, real_c, gen_z, gen_c, sync, gain, cur_nimg, af_pen, af_start):
         assert phase in ['Gmain', 'Greg', 'Gboth', 'Dmain', 'Dreg', 'Dboth']
         do_Gmain = (phase in ['Gmain', 'Gboth'])
         do_Dmain = (phase in ['Dmain', 'Dboth'])
@@ -69,7 +74,47 @@ class StyleGAN2Loss(Loss):
                 training_stats.report('Loss/scores/fake', gen_logits)
                 training_stats.report('Loss/signs/fake', gen_logits.sign())
                 loss_Gmain = torch.nn.functional.softplus(-gen_logits) # -log(sigmoid(gen_logits))
-                training_stats.report('Loss/G/loss', loss_Gmain)
+                #training_stats.report('Loss/G/loss', loss_Gmain)
+
+                #Aditya Gollapalli's code
+                if cur_nimg//1000>=af_start: #vf loss calculation point in training
+                 im_bat_sz=gen_img.size(dim=0)
+                 im_sz_x=gen_img.size(dim=2)
+                 im_sz_y=gen_img.size(dim=3)
+                 trans_pil=T.ToPILImage()
+                 #af_pen=5
+
+                 c_dev=loss_Gmain.get_device()
+                 cuda_dev="cuda:"+str(c_dev)
+                 af_g_loss=torch.zeros(im_bat_sz,device=torch.device(cuda_dev))
+                 
+                 for img_idx in range(im_bat_sz):
+                     pil_img_gen=trans_pil(gen_img[img_idx][:][:][:])
+                     np_img_gen=np.array(pil_img_gen)
+                     cv_img_gen=cv2.cvtColor(np_img_gen, cv2.COLOR_RGB2GRAY)
+                     cv_img_gen=cv2.fastNlMeansDenoising(cv_img_gen,None,31,1)
+                     bn_img_gen=cv2.adaptiveThreshold(cv_img_gen,255,cv2.ADAPTIVE_THRESH_MEAN_C,cv2.THRESH_BINARY,75,1)
+                     pil_img_real=trans_pil(real_img[img_idx][:][:][:])
+                     np_img_real=np.array(pil_img_real)
+                     cv_img_real=cv2.cvtColor(np_img_real, cv2.COLOR_RGB2GRAY)
+                     cv_img_real=cv2.fastNlMeansDenoising(cv_img_real,None,31,1)
+                     bn_img_real=cv2.adaptiveThreshold(cv_img_real,255,cv2.ADAPTIVE_THRESH_MEAN_C,cv2.THRESH_BINARY,75,1)
+                     gp_pix_gen=0
+                     gp_pix_real=0
+                     for img_x in range(im_sz_x):
+                         for img_y in range(im_sz_y):
+                             if bn_img_gen[img_x][img_y]==255:
+                                gp_pix_gen = gp_pix_gen+1
+                             if bn_img_real[img_x][img_y]==255:
+                                gp_pix_real = gp_pix_real+1
+                     af_gen=gp_pix_gen/(im_sz_x*im_sz_y)
+                     af_real=gp_pix_real/(im_sz_x*im_sz_y)
+                     af_g_loss[img_idx]=af_pen*abs(af_gen-af_real)
+                
+                 loss_Gmain=torch.add(loss_Gmain,af_g_loss)
+
+                training_stats.report('Loss/G/loss', loss_Gmain)   
+
             with torch.autograd.profiler.record_function('Gmain_backward'):
                 loss_Gmain.mean().mul(gain).backward()
 

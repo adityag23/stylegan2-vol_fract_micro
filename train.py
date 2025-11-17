@@ -64,6 +64,10 @@ def setup_training_loop_kwargs(
     allow_tf32 = None, # Allow PyTorch to use TF32 for matmul and convolutions: <bool>, default = False
     nobench    = None, # Disable cuDNN benchmarking: <bool>, default = False
     workers    = None, # Override number of DataLoader workers: <int>, default = 3
+
+    #Aditya Gollapalli's code
+    af_pen    =  None,
+    af_start  =  None,
 ):
     args = dnnlib.EasyDict()
 
@@ -356,6 +360,13 @@ def setup_training_loop_kwargs(
             raise UserError('--workers must be at least 1')
         args.data_loader_kwargs.num_workers = workers
 
+   #Aditya Gollapalli's code
+    if af_pen is None:
+        args.af_pen=0
+ 
+    if af_start is None:
+        args.af_start=1000
+
     return desc, args
 
 #----------------------------------------------------------------------------
@@ -434,6 +445,10 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--nobench', help='Disable cuDNN benchmarking', type=bool, metavar='BOOL')
 @click.option('--allow-tf32', help='Allow PyTorch to use TF32 internally', type=bool, metavar='BOOL')
 @click.option('--workers', help='Override number of DataLoader workers', type=int, metavar='INT')
+
+# Aditya Gollapalli's code
+@click.option('--af_pen', help='Penality multiplier for area fraction loss constraint (Default 0)', type=float, metavar='FLOAT')
+@click.option('--af_start', help='Starting kimg for area fraction loss constraint (Default 1000)', type=int, metavar='INT')
 
 def main(ctx, outdir, dry_run, **config_kwargs):
     """Train a GAN using the techniques described in the paper

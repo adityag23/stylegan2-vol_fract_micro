@@ -39,7 +39,7 @@ def num_range(s: str) -> List[int]:
 @click.option('--network', 'network_pkl', help='Network pickle filename', required=True)
 @click.option('--seeds', type=num_range, help='List of random seeds')
 @click.option('--trunc', 'truncation_psi', type=float, help='Truncation psi', default=1, show_default=True)
-@click.option('--class', 'class_idx', type=int, help='Class label (unconditional if not specified)')
+@click.option('--class','class_idx', help='Class label (unconditional if not specified)') #edit type is list
 @click.option('--noise-mode', help='Noise mode', type=click.Choice(['const', 'random', 'none']), default='const', show_default=True)
 @click.option('--projected-w', help='Projection result file', type=str, metavar='FILE')
 @click.option('--outdir', help='Where to save the output images', type=str, required=True, metavar='DIR')
@@ -50,7 +50,7 @@ def generate_images(
     truncation_psi: float,
     noise_mode: str,
     outdir: str,
-    class_idx: Optional[int],
+    class_idx: Optional[str],                      
     projected_w: Optional[str]
 ):
     """Generate images using pretrained network pickle.
@@ -107,7 +107,11 @@ def generate_images(
     if G.c_dim != 0:
         if class_idx is None:
             ctx.fail('Must specify class label with --class when using a conditional network')
-        label[:, class_idx] = 1
+#        label[:, 0] = class_idx
+        lab = list(class_idx.split(","))        
+        for i in range(G.c_dim):
+            label[:,i] = float(lab[i])                                                                     #label will be a list
+        print(label)
     else:
         if class_idx is not None:
             print ('warn: --class=lbl ignored when running on an unconditional network')
